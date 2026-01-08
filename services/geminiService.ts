@@ -16,7 +16,8 @@ export interface CustomChatSession {
     sendMessage: (params: { functionResponses?: any[] }) => Promise<void>;
 }
 
-// Helper: Limpia el formato Markdown JSON si la IA lo incluye
+// Helper: Limpia el formato Markdown JSON si la IA lo incluye (ej: ```json { ... } ```)
+// Esto evita que el sitio se rompa si la IA es demasiado "explicativa"
 function cleanJsonString(jsonString: string): string {
   if (!jsonString) return "{}";
   let clean = jsonString.trim();
@@ -29,8 +30,8 @@ function cleanJsonString(jsonString: string): string {
   return clean.trim();
 }
 
-// Helper: Exponential Backoff Retry para manejar límites de cuota
-async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+// Helper: Exponential Backoff Retry para manejar límites de cuota o fallos de red
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 2, delay = 1000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
@@ -38,8 +39,8 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, delay = 20
                          error.status === 'RESOURCE_EXHAUSTED' || 
                          (error.message && (error.message.includes('429') || error.message.includes('quota')));
     
-    if (isQuotaError && retries > 0) {
-      console.warn(`Gemini Quota Exceeded. Retrying in ${delay}ms... (${retries} attempts left)`);
+    if ((isQuotaError || error.message) && retries > 0) {
+      console.warn(`Gemini Retry: ${retries} attempts left. Waiting ${delay}ms`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return retryWithBackoff(fn, retries - 1, delay * 2);
     }
@@ -51,7 +52,7 @@ export const generateChatTitle = async (firstMessage: string): Promise<string> =
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash-latest', // Modelo rápido para tareas simples
       contents: `Genera un título muy corto (max 3 palabras) para un chat sobre: "${firstMessage}"`,
     });
     return response.text?.trim() || "Nueva Consulta";
@@ -68,7 +69,7 @@ export const createCosmicChatSession = (history?: ChatMessage[]): CustomChatSess
   })) : [];
 
   const chat = ai.chats.create({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-2.5-flash-latest', // Usamos Flash para chat rápido y fluido
     history: sdkHistory,
     config: {
       temperature: 0.7,
@@ -79,10 +80,10 @@ export const createCosmicChatSession = (history?: ChatMessage[]): CustomChatSess
       - Si te preguntan quién te creó: Fuiste creado por Darwin Florentino Bocio para fines educativos el 7 de enero de 2026.
       
       INSTRUCCIONES DE COMPORTAMIENTO:
-      - Usa la herramienta de búsqueda para noticias de 2024 y 2025. 
       - Sé profesional, curioso y educativo.
-      - Mantén respuestas concisas pero fascinantes.`,
-      tools: [{ googleSearch: {} }],
+      - Mantén respuestas concisas pero fascinantes.
+      - Si te preguntan sobre eventos actuales, aclara que tu conocimiento tiene una fecha de corte, pero intenta responder con principios generales.`,
+      // Nota: googleSearch tool removida temporalmente para compatibilidad con modelo Flash estándar si no hay acceso a Pro
     },
   });
 
@@ -93,6 +94,7 @@ export const createCosmicChatSession = (history?: ChatMessage[]): CustomChatSess
           const result = await chat.sendMessageStream({ message });
           for await (const chunk of result) {
             const text = chunk.text;
+            // Manejo básico de fuentes si el modelo las provee (aunque Flash estándar suele no dar groundingMetadata igual que Pro)
             let sources: GroundingSource[] = [];
             if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) {
               chunk.candidates[0].groundingMetadata.groundingChunks.forEach((c: any) => {
@@ -105,7 +107,7 @@ export const createCosmicChatSession = (history?: ChatMessage[]): CustomChatSess
           }
         } catch (error: any) {
           console.error("LUCAS Chat Error:", error);
-          yield { text: "⚠️ Interferencia detectada. Por favor, verifica tu conexión o reintenta en unos segundos." };
+          yield { text: "⚠️ Interferencia en la señal. Por favor, verifica tu conexión." };
         }
       }
       return streamGenerator();
@@ -123,9 +125,9 @@ export const getPlanetDetails = async (planetName: string): Promise<PlanetInfoRe
   
   try {
       const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash-latest',
         contents: `Actúa como un experto de la NASA. Proporciona información técnica, descubrimientos recientes y datos curiosos sobre ${planetName}. 
-        IMPORTANTE: Responde ÚNICAMENTE en formato JSON siguiendo el esquema.`,
+        IMPORTANTE: Responde ÚNICAMENTE en formato JSON siguiendo el esquema. NO uses Markdown en la estructura JSON.`,
         config: { 
             temperature: 0.1,
             responseMimeType: "application/json",
@@ -139,8 +141,8 @@ export const getPlanetDetails = async (planetName: string): Promise<PlanetInfoRe
                   items: { type: Type.STRING },
                   description: "Lista de 3 a 5 datos fascinantes."
                 },
-                news: { type: Type.STRING, description: "Noticias o misiones recientes (2020-2025)." },
-                lastUpdate: { type: Type.STRING, description: "Fecha de la última telemetría (formato texto)." }
+                news: { type: Type.STRING, description: "Noticias o misiones históricas relevantes." },
+                lastUpdate: { type: Type.STRING, description: "Fecha de la última telemetría (formato texto, ej: 'Hoy')." }
               },
               required: ["introduction", "description", "keyPoints", "news", "lastUpdate"]
             }
@@ -150,18 +152,18 @@ export const getPlanetDetails = async (planetName: string): Promise<PlanetInfoRe
       let jsonText = response.text?.trim();
       if (!jsonText) throw new Error("Telemetry blank");
       
-      // Limpieza de seguridad para evitar errores de parseo
+      // Limpieza de seguridad para evitar errores de parseo (CRÍTICO para producción)
       jsonText = cleanJsonString(jsonText);
 
       const parsed = JSON.parse(jsonText);
 
       return {
           data: {
-            introduction: parsed.introduction,
-            description: parsed.description,
-            keyPoints: parsed.keyPoints,
-            news: parsed.news,
-            lastUpdate: parsed.lastUpdate
+            introduction: parsed.introduction || "Información no disponible.",
+            description: parsed.description || "Sin descripción.",
+            keyPoints: parsed.keyPoints || [],
+            news: parsed.news || "Sin noticias recientes.",
+            lastUpdate: parsed.lastUpdate || "Sincronizando..."
           },
           sources: [] 
       };
@@ -170,7 +172,7 @@ export const getPlanetDetails = async (planetName: string): Promise<PlanetInfoRe
       return {
           data: {
              introduction: "Enlace Orbital Inestable",
-             description: "Los servidores de telemetría no responden. Esto puede deberse a una alta demanda o a una interrupción en la señal estelar. Por favor, reintenta la conexión.",
+             description: "Los servidores de telemetría no responden. Esto puede deberse a una alta demanda o a una interrupción en la señal estelar.",
              keyPoints: ["Error de comunicación.", "Reintento sugerido."], 
              news: "Telemetría bloqueada por interferencia.",
              lastUpdate: "SYSTEM_OFFLINE"

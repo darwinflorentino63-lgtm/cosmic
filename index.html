@@ -9,13 +9,14 @@
     <meta name="description" content="Explora el sistema solar en tiempo real con Inteligencia Artificial. Accede a datos de la NASA, genera imágenes y conversa con LUCAS OS.">
     <meta name="theme-color" content="#020617">
     <meta name="author" content="Darwin Florentino">
+    <meta name="keywords" content="Espacio, Sistema Solar, NASA, IA, Educación, Astronomía, Gemini">
     
-    <!-- Open Graph / Facebook -->
+    <!-- Open Graph / Redes Sociales -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Cosmic Explorer - Misión Estelar">
     <meta property="og:description" content="Tu terminal de acceso al sistema solar. Powered by Gemini AI.">
     
-    <!-- Dynamic Favicon (Planet Icon) -->
+    <!-- Dynamic Favicon (Icono de Planeta generado por código) -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2338bdf8' /><ellipse cx='50' cy='50' rx='50' ry='15' fill='none' stroke='white' stroke-width='5' transform='rotate(-20 50 50)'/></svg>">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -71,18 +72,27 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
+        
+        /* Animaciones base */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
     </style>
+    
+    <!-- IMPORT MAP: Corregido para evitar conflicto de versiones de React -->
     <script type="importmap">
-    {
-      "imports": {
-        "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-        "react/": "https://esm.sh/react@^19.2.3/",
-        "react": "https://esm.sh/react@^19.2.3",
-        "react-markdown": "https://esm.sh/react-markdown@^10.1.0"
-      }
-    }
-    </script>
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react": "https://esm.sh/react@18.2.0",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "react-markdown": "https://esm.sh/react-markdown@9.0.1?bundle",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
 </head>
 <body>
     <div id="root"></div>

@@ -7,13 +7,15 @@ import { Planet, PlanetInfoResponse, User } from './types';
 import { dbService } from './services/userService';
 
 const App: React.FC = () => {
-  // Verificación sincrónica inmediata
+  // Verificación segura del usuario inicial
   const getInitialUser = (): User | null => {
     const savedUser = localStorage.getItem('cosmic_user');
     if (!savedUser) return null;
     try {
       return JSON.parse(savedUser);
     } catch (e) {
+      console.error("Error leyendo datos de usuario, limpiando sesión corrupta.");
+      localStorage.removeItem('cosmic_user'); // Autolimpieza si hay error
       return null;
     }
   };
