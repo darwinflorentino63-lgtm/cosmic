@@ -1,0 +1,5 @@
+{
+  "name": "cosmic-explorer-v1",
+  "description": "Terminal de exploración espacial interactiva. Incluye IA generativa (Gemini), chat en tiempo real (LUCAS OS) y sistema de comunidad estelar.",
+  "requestFramePermissions": []
+}
